@@ -6,9 +6,13 @@
 </head>
 <body>
 <h1>Tap and Scrape Sequencer</h1>
-<p class="sub">Step 4: press Play to loop the whole set. Tap slots to switch them on or off.</p>
+<p class="sub">Press Play, tap slots to switch them on or off, slide the tempo.</p>
+<div class="controls">
 <button id="play" type="button">&#9654; Play</button>
-<canvas id="rig" width="640" height="500"></canvas>
+<button id="stop" type="button" disabled>&#9632; Stop</button>
+<label class="tempo">Tempo <input id="tempo" type="range" min="60" max="200" value="110" aria-label="Tempo in beats per minute"> <span id="bpm">110 BPM</span></label>
+</div>
+<canvas id="rig" width="640" height="510"></canvas>
 <script src="sound.js"></script>
 <script src="rig.js"></script>
 </body>
