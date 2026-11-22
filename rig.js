@@ -7,7 +7,7 @@ const STEPS = 8;
 const CW = 52, CH = 20, GAP = 4;
 const GW = STEPS * CW + (STEPS - 1) * GAP;
 const GX = Math.round((W - GW) / 2);
-const GY = 372;
+const GY = 388;
 
 const arms = [];
 const pitches = [150, 0, 220, 0];
@@ -28,9 +28,8 @@ let playing = false;
 let step = 0;
 let nextTime = 0;
 let timer = null;
-let queue = []; // steps scheduled in audio time, waiting to be shown
-const BPM = 110;
-const stepDur = 60 / BPM / 2; // eighth notes
+let queue = [];
+let bpm = 110; // the tempo slider changes this
 
 function slotRect(r, c) {
   return { x: GX + c * (CW + GAP), y: GY + r * (CH + GAP), w: CW, h: CH };
@@ -75,21 +74,27 @@ function drawArm(a) {
 }
 
 function drawSlots() {
-  // panel is tall enough now to hold all four rows
-  plank(40, 346, 560, 146, '#5a3819');
+  plank(40, 346, 560, 154, '#5a3819');
   ctx.fillStyle = '#f3e2c4';
   ctx.font = '12px Georgia, serif';
   ctx.textAlign = 'center';
   ctx.fillText('BEAT GRID: steps 1-8, one row per arm (top to bottom)', W / 2, 362);
-  if (playhead >= 0) {
-    ctx.fillStyle = 'rgba(255,255,255,0.28)';
-    ctx.fillRect(GX + playhead * (CW + GAP) - 2, GY - 3, CW + 4, 4 * (CH + GAP) + 2);
+  // step numbers; the current one glows (dimmer marker at step 1 when stopped)
+  const head = playhead >= 0 ? playhead : 0;
+  for (let c = 0; c < STEPS; c++) {
+    const s = slotRect(0, c);
+    ctx.fillStyle = c === head ? (playing ? '#ffd27a' : '#c9a86a') : '#a88a62';
+    ctx.font = (c === head ? 'bold ' : '') + '13px Georgia, serif';
+    ctx.fillText(String(c + 1), s.x + CW / 2, GY - 6);
   }
+  ctx.fillStyle = playing ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.10)';
+  ctx.fillRect(GX + head * (CW + GAP) - 2, GY - 3, CW + 4, 4 * (CH + GAP) + 2);
   for (let r = 0; r < arms.length; r++) {
     for (let c = 0; c < STEPS; c++) {
       const s = slotRect(r, c);
       const on = slots[r][c];
-      ctx.fillStyle = on ? (arms[r].kind === 'tap' ? '#ffd27a' : '#9fe0a0') : '#33200f';
+      const lit = playing && c === playhead && on;
+      ctx.fillStyle = on ? (arms[r].kind === 'tap' ? (lit ? '#fff0b0' : '#ffd27a') : (lit ? '#d4ffd5' : '#9fe0a0')) : '#33200f';
       ctx.fillRect(s.x, s.y, s.w, s.h);
       ctx.strokeStyle = on ? '#fff3c4' : '#7a5230';
       ctx.lineWidth = 2;
@@ -118,14 +123,13 @@ function draw() {
   drawSlots();
 }
 
-// knock an arm and make its sound right now
 function knock(a) {
   a.hit = 1;
   if (a.kind === 'tap') playTap(a.pitch); else playScrape(a.pitch);
 }
 
-// the scheduler looks a little ahead and books sounds at exact audio times,
-// so the loop stays steady even if the page hiccups
+// the scheduler looks a little ahead and books sounds at exact audio times.
+// stepDur is worked out fresh each time so the tempo slider takes effect right away
 function schedule() {
   const ac = audio(); if (!ac) return;
   while (nextTime < ac.currentTime + 0.15) {
@@ -135,36 +139,46 @@ function schedule() {
       }
     });
     queue.push({ t: nextTime, step: step });
-    nextTime += stepDur;
+    nextTime += 60 / bpm / 2; // eighth notes
     step = (step + 1) % STEPS;
   }
 }
 
 const playBtn = document.getElementById('play');
+const stopBtn = document.getElementById('stop');
+const tempo = document.getElementById('tempo');
+const bpmLabel = document.getElementById('bpm');
 
 function startLoop() {
-  const ac = audio(); if (!ac) return;
+  const ac = audio(); if (!ac || playing) return;
   playing = true;
   step = 0;
   queue = [];
   nextTime = ac.currentTime + 0.08;
   schedule();
   timer = setInterval(schedule, 25);
-  playBtn.innerHTML = '&#9632; Stop';
+  playBtn.disabled = true;
+  stopBtn.disabled = false;
 }
 
+// stop: halt the scheduler, clear the queue and put the playhead back at the start
 function stopLoop() {
   playing = false;
   clearInterval(timer);
   queue = [];
   playhead = -1;
-  playBtn.innerHTML = '&#9654; Play';
+  playBtn.disabled = false;
+  stopBtn.disabled = true;
 }
 
-playBtn.addEventListener('click', () => { if (playing) stopLoop(); else startLoop(); });
+playBtn.addEventListener('click', startLoop);
+stopBtn.addEventListener('click', stopLoop);
+tempo.addEventListener('input', () => {
+  bpm = +tempo.value;
+  bpmLabel.textContent = bpm + ' BPM';
+});
 
 function update() {
-  // show steps whose audio time has arrived: move playhead, swing arms
   if (playing && actx) {
     while (queue.length && queue[0].t <= actx.currentTime) {
       const q = queue.shift();
@@ -172,11 +186,12 @@ function update() {
       arms.forEach((a, i) => { if (slots[i][q.step]) a.hit = 1; });
     }
   }
+  // a bigger swing so the arms clearly move when they hit
   for (const a of arms) {
     if (a.hit > 0) {
-      a.hit -= 0.06;
-      a.angle = Math.sin(a.hit * Math.PI) * 0.35 * (a.hit > 0.5 ? -1 : 1) * 0.6;
+      a.hit -= 0.05;
       if (a.hit <= 0) { a.hit = 0; a.angle = 0; }
+      else a.angle = Math.sin(a.hit * Math.PI) * 0.5 * (a.x < W / 2 ? 1 : -1);
     }
   }
   draw();
@@ -192,7 +207,7 @@ canvas.addEventListener('pointerdown', e => {
       const s = slotRect(row, c);
       if (x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h) {
         slots[row][c] = !slots[row][c];
-        if (slots[row][c] && !playing) knock(arms[row]); // preview only when not looping
+        if (slots[row][c] && !playing) knock(arms[row]);
         return;
       }
     }
