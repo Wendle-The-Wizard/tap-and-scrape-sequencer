@@ -4,14 +4,11 @@ const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 
 const STEPS = 8;
-// grid geometry: centered under the rig (rig spans x 40..600, center 320)
 const CW = 52, CH = 20, GAP = 4;
-const LABEL = 0;
-const GW = STEPS * CW + (STEPS - 1) * GAP; // 444
+const GW = STEPS * CW + (STEPS - 1) * GAP;
 const GX = Math.round((W - GW) / 2);
 const GY = 372;
 
-// four arms, each hangs from a pivot on the top beam
 const arms = [];
 const pitches = [150, 0, 220, 0];
 const scrapePitches = [0, 900, 0, 1400];
@@ -22,9 +19,18 @@ for (let i = 0; i < 4; i++) {
 const slots = arms.map(() => new Array(STEPS).fill(false));
 [0, 4].forEach(s => slots[0][s] = true);
 [2, 6].forEach(s => slots[1][s] = true);
+[1, 3, 5, 7].forEach(s => slots[2][s] = true);
+[7].forEach(s => slots[3][s] = true);
 
-// no playback yet (step 4), so no playhead position
-const playhead = -1;
+// playback state
+let playhead = -1;
+let playing = false;
+let step = 0;
+let nextTime = 0;
+let timer = null;
+let queue = []; // steps scheduled in audio time, waiting to be shown
+const BPM = 110;
+const stepDur = 60 / BPM / 2; // eighth notes
 
 function slotRect(r, c) {
   return { x: GX + c * (CW + GAP), y: GY + r * (CH + GAP), w: CW, h: CH };
@@ -69,17 +75,15 @@ function drawArm(a) {
 }
 
 function drawSlots() {
-  plank(40, 346, 560, 110, '#5a3819');
+  // panel is tall enough now to hold all four rows
+  plank(40, 346, 560, 146, '#5a3819');
   ctx.fillStyle = '#f3e2c4';
   ctx.font = '12px Georgia, serif';
   ctx.textAlign = 'center';
   ctx.fillText('BEAT GRID: steps 1-8, one row per arm (top to bottom)', W / 2, 362);
-  for (let c = 0; c < STEPS; c++) {
-    // playhead highlight column (used once playback exists)
-    if (c === playhead) {
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.fillRect(GX + c * (CW + GAP) - 2, GY - 2, CW + 4, 4 * (CH + GAP));
-    }
+  if (playhead >= 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.fillRect(GX + playhead * (CW + GAP) - 2, GY - 3, CW + 4, 4 * (CH + GAP) + 2);
   }
   for (let r = 0; r < arms.length; r++) {
     for (let c = 0; c < STEPS; c++) {
@@ -114,13 +118,60 @@ function draw() {
   drawSlots();
 }
 
-// knock an arm and make its sound
+// knock an arm and make its sound right now
 function knock(a) {
   a.hit = 1;
   if (a.kind === 'tap') playTap(a.pitch); else playScrape(a.pitch);
 }
 
+// the scheduler looks a little ahead and books sounds at exact audio times,
+// so the loop stays steady even if the page hiccups
+function schedule() {
+  const ac = audio(); if (!ac) return;
+  while (nextTime < ac.currentTime + 0.15) {
+    arms.forEach((a, i) => {
+      if (slots[i][step]) {
+        if (a.kind === 'tap') playTap(a.pitch, nextTime); else playScrape(a.pitch, nextTime);
+      }
+    });
+    queue.push({ t: nextTime, step: step });
+    nextTime += stepDur;
+    step = (step + 1) % STEPS;
+  }
+}
+
+const playBtn = document.getElementById('play');
+
+function startLoop() {
+  const ac = audio(); if (!ac) return;
+  playing = true;
+  step = 0;
+  queue = [];
+  nextTime = ac.currentTime + 0.08;
+  schedule();
+  timer = setInterval(schedule, 25);
+  playBtn.innerHTML = '&#9632; Stop';
+}
+
+function stopLoop() {
+  playing = false;
+  clearInterval(timer);
+  queue = [];
+  playhead = -1;
+  playBtn.innerHTML = '&#9654; Play';
+}
+
+playBtn.addEventListener('click', () => { if (playing) stopLoop(); else startLoop(); });
+
 function update() {
+  // show steps whose audio time has arrived: move playhead, swing arms
+  if (playing && actx) {
+    while (queue.length && queue[0].t <= actx.currentTime) {
+      const q = queue.shift();
+      playhead = q.step;
+      arms.forEach((a, i) => { if (slots[i][q.step]) a.hit = 1; });
+    }
+  }
   for (const a of arms) {
     if (a.hit > 0) {
       a.hit -= 0.06;
@@ -141,7 +192,7 @@ canvas.addEventListener('pointerdown', e => {
       const s = slotRect(row, c);
       if (x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h) {
         slots[row][c] = !slots[row][c];
-        if (slots[row][c]) knock(arms[row]); // preview the sound
+        if (slots[row][c] && !playing) knock(arms[row]); // preview only when not looping
         return;
       }
     }
