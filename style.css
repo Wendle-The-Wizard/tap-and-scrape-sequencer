@@ -1,0 +1,5 @@
+/* Wendle's style: warm, woody, simple */
+body{margin:0;padding:12px;background:#2b1d14;color:#f3e2c4;font-family:Georgia,serif;text-align:center}
+h1{font-size:1.5rem;margin:8px 0 2px}
+.sub{margin:0 0 10px;font-size:.95rem;opacity:.85}
+canvas{width:100%;max-width:640px;height:auto;border-radius:10px;box-shadow:0 4px 14px #000a;touch-action:manipulation;background:#3a281b}
