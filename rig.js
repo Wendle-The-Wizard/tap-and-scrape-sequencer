@@ -1,28 +1,35 @@
-// Wendle's wooden rig: a frame, a drum board, four tapping arms and a grid of beat slots.
+// Wendle's wooden rig: a frame, four tapping arms and a labeled grid of beat slots.
 const canvas = document.getElementById('rig');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 
+const STEPS = 8;
+// grid geometry: centered under the rig (rig spans x 40..600, center 320)
+const CW = 52, CH = 20, GAP = 4;
+const LABEL = 0;
+const GW = STEPS * CW + (STEPS - 1) * GAP; // 444
+const GX = Math.round((W - GW) / 2);
+const GY = 372;
+
 // four arms, each hangs from a pivot on the top beam
 const arms = [];
+const pitches = [150, 0, 220, 0];
+const scrapePitches = [0, 900, 0, 1400];
 for (let i = 0; i < 4; i++) {
-  arms.push({ x: 130 + i * 127, angle: 0, hit: 0, kind: i % 2 ? 'scrape' : 'tap' });
+  arms.push({ x: 130 + i * 127, angle: 0, hit: 0, kind: i % 2 ? 'scrape' : 'tap', name: i % 2 ? 'Scrape' : 'Tap', pitch: i % 2 ? scrapePitches[i] : pitches[i] });
 }
 
-// beat slots: one row per arm, 8 steps each. true = on
-const STEPS = 8;
 const slots = arms.map(() => new Array(STEPS).fill(false));
-// a starting pattern so it isn't empty
 [0, 4].forEach(s => slots[0][s] = true);
 [2, 6].forEach(s => slots[1][s] = true);
 
-// where the slot grid lives (below the rig)
-const GX = 100, GY = 358, CW = 52, CH = 20, GAP = 4;
+// no playback yet (step 4), so no playhead position
+const playhead = -1;
+
 function slotRect(r, c) {
-  return { x: GX + c * (CW + GAP) - 20 + 20, y: GY + r * (CH + GAP), w: CW, h: CH };
+  return { x: GX + c * (CW + GAP), y: GY + r * (CH + GAP), w: CW, h: CH };
 }
 
-// wood grain helper: a plank with a few lines
 function plank(x, y, w, h, color) {
   ctx.fillStyle = color;
   ctx.fillRect(x, y, w, h);
@@ -61,9 +68,19 @@ function drawArm(a) {
   ctx.strokeStyle = '#6d5010'; ctx.lineWidth = 2; ctx.stroke();
 }
 
-// the slot grid: glowing pegs when on, dark wood when off
 function drawSlots() {
-  plank(40, 346, 560, 108, '#5a3819');
+  plank(40, 346, 560, 110, '#5a3819');
+  ctx.fillStyle = '#f3e2c4';
+  ctx.font = '12px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('BEAT GRID: steps 1-8, one row per arm (top to bottom)', W / 2, 362);
+  for (let c = 0; c < STEPS; c++) {
+    // playhead highlight column (used once playback exists)
+    if (c === playhead) {
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillRect(GX + c * (CW + GAP) - 2, GY - 2, CW + 4, 4 * (CH + GAP));
+    }
+  }
   for (let r = 0; r < arms.length; r++) {
     for (let c = 0; c < STEPS; c++) {
       const s = slotRect(r, c);
@@ -86,14 +103,22 @@ function draw() {
   plank(40, 40, 560, 36, '#a06a35');
   plank(40, 300, 560, 40, '#7a4c24');
   for (const a of arms) drawArm(a);
-  for (const a of arms) {
+  ctx.textAlign = 'center';
+  ctx.font = '12px Georgia, serif';
+  arms.forEach((a, i) => {
     ctx.fillStyle = a.hit > 0 ? '#ffd27a' : '#4d2f16';
     ctx.fillRect(a.x - 26, 296, 52, 8);
-  }
+    ctx.fillStyle = '#f3e2c4';
+    ctx.fillText((i + 1) + ' ' + a.name, a.x, 324);
+  });
   drawSlots();
 }
 
-function knock(a) { a.hit = 1; }
+// knock an arm and make its sound
+function knock(a) {
+  a.hit = 1;
+  if (a.kind === 'tap') playTap(a.pitch); else playScrape(a.pitch);
+}
 
 function update() {
   for (const a of arms) {
@@ -107,7 +132,6 @@ function update() {
   requestAnimationFrame(update);
 }
 
-// tap a slot to flip it; tap above the grid to knock an arm
 canvas.addEventListener('pointerdown', e => {
   const r = canvas.getBoundingClientRect();
   const x = (e.clientX - r.left) * W / r.width;
@@ -117,12 +141,16 @@ canvas.addEventListener('pointerdown', e => {
       const s = slotRect(row, c);
       if (x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h) {
         slots[row][c] = !slots[row][c];
-        if (slots[row][c]) knock(arms[row]); // a little knock as feedback
+        if (slots[row][c]) knock(arms[row]); // preview the sound
         return;
       }
     }
   }
-  if (y < 346) for (const a of arms) if (Math.abs(x - a.x) < 60) knock(a);
+  if (y < 346) {
+    let best = null;
+    for (const a of arms) if (Math.abs(x - a.x) < 60 && (!best || Math.abs(x - a.x) < Math.abs(x - best.x))) best = a;
+    if (best) knock(best);
+  }
 });
 
 update();
