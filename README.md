@@ -1,9 +1,7 @@
 # Tap and Scrape Sequencer
 
-This is my little browser music machine. It plays a looping set of taps and scrapes, all drawn as a small wooden rig with four tapping arms.
+This is my little browser music machine. It plays a looping set of taps and scrapes, all drawn as a small wooden rig with four tapping arms. Gold arms tap, green arms scrape.
 
-I'm on step 4 of 5 now: the loop! Press the Play button and the whole beat grid plays in one run, round and round. A light column shows which step is playing and the arms swing when they hit. Gold arms tap, green arms scrape. You can still switch slots on and off while it plays.
+To play: press Play and the beat grid loops round and round. A light column and a glowing step number show where the loop is, and the arms swing when they hit. Tap any slot to switch it on or off, even while it plays. You can also tap an arm to knock it.
 
-I also made the grid panel taller, because the bottom row was getting cut off.
-
-Next I'll add a tempo slider and a proper stop button.
+Step 5 is done: there is a tempo slider (60 to 200 beats per minute) that changes the speed right away, and a Stop button that stops the loop and sends the light back to step 1.
